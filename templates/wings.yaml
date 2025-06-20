@@ -1,0 +1,105 @@
+{{- if .Values.applications.wings.enabled -}}
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: wings
+  namespace: argocd
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    name: scaleway
+    kind: ClusterSecretStore
+  target:
+    name: wings
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      metadata:
+        labels:
+          argocd.argoproj.io/secret-type: repository
+      data:
+        name: wings
+        username: github
+        password: "{{ `{{ .password }}` }}"
+        type: git
+        url: https://github.com/kubn-dev/onekube-wings.git
+  data:
+    - secretKey: password
+      remoteRef:
+        key: "name:github-token"
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: wings-chart
+  namespace: argocd
+spec:
+  refreshInterval: 1m
+  secretStoreRef:
+    name: scaleway
+    kind: ClusterSecretStore
+  target:
+    name: wings-chart
+    creationPolicy: Owner
+    template:
+      engineVersion: v2
+      metadata:
+        labels:
+          argocd.argoproj.io/secret-type: repository
+      data:
+        name: wings-chart
+        username: nologin
+        password: "{{ `{{ .password }}` }}"
+        project: wings
+        type: helm
+        url: rg.fr-par.scw.cloud/n3-onekube-wings-chart
+        enableOCI: "true"
+  data:
+    - secretKey: password
+      remoteRef:
+        key: "name:oci-wings-chart"
+        property: secret
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  name: wings
+  namespace: argocd
+spec:
+  goTemplate: true
+  goTemplateOptions:
+    - missingkey=error
+  generators:
+    - git:
+        repoURL: https://github.com/kubn-dev/onekube-wings.git
+        revision: HEAD
+        directories:
+          - path: values/*
+  template:
+    metadata:
+      name: 'wing-{{`{{.path.basename}}`}}'
+      annotations:
+        argocd.argoproj.io/sync-wave: "1"
+    spec:
+      project: wings
+      sources:
+        - repoURL: rg.fr-par.scw.cloud/n3-onekube-wings-chart
+          chart: wings
+          targetRevision: "1.3.5"
+          helm:
+            releaseName: 'wing-{{`{{.path.basename}}`}}'
+            valueFiles:
+              - $valuesSource/values/{{`{{.path.basename}}`}}/values.yaml
+        - repoURL: https://github.com/kubn-dev/onekube-wings.git
+          targetRevision: HEAD
+          ref: valuesSource
+      destination:
+        server: https://kubernetes.default.svc
+        namespace: 'wing-{{`{{.path.basename}}`}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+        syncOptions:
+          - CreateNamespace=true
+{{- end -}}

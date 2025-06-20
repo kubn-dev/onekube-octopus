@@ -1,0 +1,6 @@
+apiVersion: v2
+name: octopus
+description: OneKube Octocpus Helm Chart for App of Apps bootstrapping
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
